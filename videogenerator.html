@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI動画・音声ジェネレーター</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1220; --panel:#151c2e; --panel2:#1a2338; --border:#2a3450;
+    --text:#e6eaf5; --muted:#8b94ad; --accent:#8b7cf7; --accent2:#a78bfa;
+    --purple:#7c3aed; --indigo:#5b5bd6; --green:#10b981; --red:#ef4444; --cyan:#22d3ee;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);line-height:1.7;padding:24px}
+  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px}
+  h1{font-size:22px;display:flex;align-items:center;gap:10px}
+  h1 .logo{color:var(--cyan);font-size:26px}
+  h2{color:var(--accent2);font-size:18px;margin-bottom:14px}
+  h3{font-size:15px;margin-bottom:8px}
+  p.desc{color:var(--muted);font-size:13px;margin-bottom:12px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .grow{flex:1}
+  label{font-size:13px;color:var(--muted)}
+  input[type=text],input[type=password],input[type=number],select,textarea{
+    background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;
+    padding:10px 12px;font-size:13px;font-family:inherit;width:100%}
+  textarea{resize:vertical;line-height:1.8}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  button{border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:700;
+    font-family:inherit;cursor:pointer;color:#fff;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .btn-indigo{background:var(--indigo)} .btn-green{background:#0ea373} .btn-purple{background:var(--purple)}
+  .btn-gray{background:#3a465f} .btn-red{background:#b91c1c}
+  .btn-sm{padding:6px 12px;font-size:12px;font-weight:500;border-radius:6px}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center}
+  .steps .icon{width:56px;height:56px;border-radius:50%;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:24px}
+  .steps b{display:block;margin-bottom:6px}
+  .steps p{font-size:12px;color:var(--muted)}
+  .fmt{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:12.5px;margin-bottom:12px}
+  .fmt code{color:var(--cyan);font-family:ui-monospace,monospace}
+  .voice-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+  .voice-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .voice-card b{font-size:13px;display:block}
+  .voice-card .vid{font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);background:var(--bg);
+    border-radius:4px;padding:1px 8px;display:inline-block;margin:6px 0}
+  .play-btn{width:36px;height:36px;border-radius:50%;background:var(--purple);font-size:13px;padding:0;margin:0 auto}
+  .page-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+  .page-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+  .page-card .thumb{width:100%;aspect-ratio:16/9;border-radius:6px;background:linear-gradient(135deg,#232c47,#141a2c);
+    display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;overflow:hidden;margin-bottom:8px}
+  .page-card .thumb img{width:100%;height:100%;object-fit:cover}
+  .line-list{display:flex;flex-direction:column;gap:8px;max-height:480px;overflow-y:auto}
+  .line-item{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+    display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;font-size:13px}
+  .line-item .lid{color:var(--muted);font-family:ui-monospace,monospace}
+  .line-item .ltext{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .line-item .lmeta{font-size:11px;color:var(--muted)}
+  .line-item audio{height:32px;max-width:230px}
+  .tag{display:inline-block;font-size:10.5px;border-radius:4px;padding:0 6px;margin-right:6px;vertical-align:1px}
+  .tag.narr{background:#1e3a8a} .tag.dial{background:#7c2d92} .tag.paus{background:#374151}
+  .status-ok{color:var(--green)} .status-err{color:var(--red)} .status-wait{color:var(--muted)}
+  .progress{height:10px;background:var(--bg);border-radius:5px;overflow:hidden;border:1px solid var(--border)}
+  .progress>div{height:100%;background:linear-gradient(90deg,var(--purple),var(--accent2));width:0%;transition:width .3s}
+  #status-text{font-size:13px;color:var(--muted);min-height:20px}
+  video{width:100%;border-radius:10px;background:#000;margin-top:12px}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:26px;max-width:640px;width:100%;
+    max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+  .note{font-size:12px;color:var(--muted);background:var(--bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 14px}
+  canvas#render-canvas{display:none}
+  .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .file-label{display:inline-flex;align-items:center;gap:8px;background:#3a465f;border-radius:8px;padding:10px 16px;
+    font-size:13px;font-weight:500;cursor:pointer}
+  .file-label input{display:none}
+  @media(max-width:760px){.steps{grid-template-columns:1fr}.line-item{grid-template-columns:36px 1fr;grid-auto-rows:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ヘッダー -->
+  <div class="card row" style="justify-content:space-between">
+    <h1><span class="logo">🎬</span>AI動画・音声ジェネレーター</h1>
+    <span style="font-size:12px;color:var(--muted)">台本 → 音声生成 → 画像と合成して動画に</span>
+  </div>
+
+  <!-- 使い方 -->
+  <div class="card">
+    <h2 style="text-align:center">かんたん4ステップの使い方</h2>
+    <div class="steps" style="grid-template-columns:repeat(4,1fr)">
+      <div><div class="icon" style="background:var(--indigo)">✏️</div><b>ステップ1:台本を用意</b><p>台本を貼り付けるか「AI生成」で作成します。</p></div>
+      <div><div class="icon" style="background:var(--purple)">🔊</div><b>ステップ2:音声を生成</b><p>台本の各行がボイスIDに従って音声になります。</p></div>
+      <div><div class="icon" style="background:#0ea373">🖼️</div><b>ステップ3:画像を設定</b><p>ページ番号ごとに背景画像をアップロードします。</p></div>
+      <div><div class="icon" style="background:#b45309">🎬</div><b>ステップ4:動画を生成</b><p>画像+音声+字幕を合成した動画をダウンロード。</p></div>
+    </div>
+  </div>
+
+  <!-- 設定 -->
+  <div class="card">
+    <h2>設定</h2>
+    <div class="settings-grid">
+      <div>
+        <label>Gemini APIキー(<a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--cyan)">Google AI Studio</a>で無料発行)</label>
+        <input type="password" id="api-key" placeholder="AIza...">
+      </div>
+      <div>
+        <label>解像度</label>
+        <select id="set-res">
+          <option value="1280x720" selected>1280×720(HD)</option>
+          <option value="1920x1080">1920×1080(フルHD)</option>
+        </select>
+      </div>
+      <div>
+        <label>行間の間(秒)</label>
+        <input type="number" id="set-gap" value="0.4" min="0" max="3" step="0.1">
+      </div>
+      <div>
+        <label>表示オプション</label>
+        <div class="row" style="gap:16px;padding-top:8px">
+          <label style="color:var(--text)"><input type="checkbox" id="set-sub" checked> 字幕を表示</label>
+          <label style="color:var(--text)"><input type="checkbox" id="set-name" checked> キャラ名を表示</label>
+        </div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:12px">APIキーはこのブラウザ(localStorage)にのみ保存され、Google以外には送信されません。音声生成のコスト目安:音声1分あたり約1〜2円(従量課金時)。無料枠はリクエスト数制限が厳しいため、混雑時は自動でリトライします。</p>
+  </div>
+
+  <!-- ボイスサンプル -->
+  <div class="card">
+    <h2>ボイスサンプル</h2>
+    <p class="desc">▶ を押すと試聴用の音声を生成して再生します(APIキーが必要です)。ボイスIDを台本CSVの5列目に指定してください。</p>
+    <div class="voice-grid" id="voice-grid"></div>
+  </div>
+
+  <!-- 1. 台本 -->
+  <div class="card">
+    <h2>1. 台本を用意する</h2>
+    <div class="fmt">
+      <b>フォーマット:</b><br>
+      <code>ID,タイプ,セリフ,キャラクター,ボイスID,ページ番号</code><br><br>
+      <b>例:</b><br>
+      <code>1,dialogue,"こんにちは!",ユイ,Female_1,1</code><br>
+      <code>2,narration,"ナレーションはキャラクター欄を空欄に。",,Female_2,1</code><br>
+      <code>3,pause,"",,PAUSE_0.5S,1</code>
+    </div>
+    <p class="desc">下の欄に台本を貼り付けるか、「AI生成」ボタンで新しい台本を作成してください。ページ番号が同じ行は同じ画像が表示されます。</p>
+    <textarea id="script-input" rows="12" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:14px">
+      <button class="btn-indigo grow" id="btn-ai-script">✨ AI生成</button>
+      <button class="btn-green grow" id="btn-hiragana">あ ひらがな化</button>
+      <button class="btn-purple grow" id="btn-tts">▶ 音声生成</button>
+      <button class="btn-gray grow" id="btn-save-csv">💾 CSV保存</button>
+      <label class="file-label">📂 CSV読込<input type="file" id="file-csv" accept=".csv,.txt"></label>
+    </div>
+  </div>
+
+  <!-- 2. 音声結果 -->
+  <div class="card">
+    <h2>2. 音声を確認する</h2>
+    <p class="desc">生成された音声の再生・ダウンロード・再生成ができます。お手元の音声ファイルを使う場合は「音声を一括アップロード」から(ファイル名の先頭の数字を行IDに対応させてください。例:<code style="color:var(--cyan)">1.mp3, 2.wav ...</code>)。</p>
+    <div class="row" style="margin-bottom:12px">
+      <label class="file-label">📂 音声を一括アップロード<input type="file" id="file-audio" accept="audio/*" multiple></label>
+      <span id="tts-progress-text" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+    <div class="line-list" id="line-list"><p class="desc">台本を用意して「音声生成」を押してください。</p></div>
+  </div>
+
+  <!-- 3. 画像 -->
+  <div class="card">
+    <h2>3. 画像を設定する</h2>
+    <p class="desc">台本のページ番号ごとに画像を設定します。一括アップロードはファイル名の先頭の数字をページ番号に対応させてください(例:<code style="color:var(--cyan)">1.png, 2.jpg ...</code>)。未設定のページは無地の背景になります。</p>
+    <div class="row" style="margin-bottom:12px">
+      <label class="file-label">🖼️ 画像を一括アップロード<input type="file" id="file-images" accept="image/*" multiple></label>
+    </div>
+    <div class="page-grid" id="page-grid"><p class="desc">台本を入力するとページ一覧が表示されます。</p></div>
+  </div>
+
+  <!-- 4. 動画生成 -->
+  <div class="card">
+    <h2>4. 動画を生成する</h2>
+    <div class="row" style="margin-bottom:12px">
+      <label class="file-label">🎵 BGM(任意)<input type="file" id="file-bgm" accept="audio/*"></label>
+      <span id="bgm-name" style="font-size:12px;color:var(--muted)">BGMなし</span>
+      <label style="margin-left:12px">BGM音量 <input type="range" id="bgm-vol" min="0" max="50" value="12" style="vertical-align:middle"></label>
+    </div>
+    <div class="row">
+      <button class="btn-purple grow" id="btn-video" style="font-size:16px;padding:16px">🎬 動画を生成する</button>
+      <button class="btn-red" id="btn-video-cancel" style="display:none">中止</button>
+    </div>
+    <div style="margin-top:14px" class="progress"><div id="video-bar"></div></div>
+    <p id="status-text"></p>
+    <video id="video-preview" controls style="display:none"></video>
+    <div class="row" style="margin-top:12px">
+      <a id="video-download" style="display:none" class="btn-green" download="drama.mp4"
+         href="#" role="button" >⬇️ 動画をダウンロード</a>
+    </div>
+    <p class="note" style="margin-top:12px">動画はブラウザ内でリアルタイム合成されます(音声の長さ=生成にかかる時間)。生成中はこのタブを前面に表示したままにしてください。Chrome推奨。</p>
+  </div>
+
+</div>
+
+<!-- AI台本生成モーダル -->
+<div class="modal-bg" id="modal-ai">
+  <div class="modal">
+    <h2>✨ AIで台本を生成</h2>
+    <div><label>テーマ・あらすじ</label>
+      <textarea id="ai-theme" rows="4" placeholder="例:小さなカフェのオーナーが、SNS自動化ツールに出会って集客に成功する物語"></textarea></div>
+    <div class="row">
+      <div class="grow"><label>行数の目安</label><input type="number" id="ai-lines" value="20" min="5" max="80"></div>
+      <div class="grow"><label>ナレーターのボイスID</label><input type="text" id="ai-narrator" value="Female_2"></div>
+    </div>
+    <div><label>登場人物とボイス(任意・1行に1人)</label>
+      <textarea id="ai-chars" rows="3" placeholder="例:マユ(カフェオーナー): Female_1&#10;佐藤(コンサルタント): Male_7"></textarea></div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn-gray" data-close>キャンセル</button>
+      <button class="btn-indigo" id="btn-ai-run">生成する</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="render-canvas"></canvas>
+<script>
+'use strict';
+/* ============================================================
+   ボイス定義(Gemini TTS の30プリビルトボイスにマッピング)
+   ============================================================ */
+const VOICES = [
+  {id:'Male_1',  g:'Puck',          label:'男性1(陽気)'},
+  {id:'Male_2',  g:'Charon',        label:'男性2(情報通)'},
+  {id:'Male_3',  g:'Fenrir',        label:'男性3(熱血)'},
+  {id:'Male_4',  g:'Orus',          label:'男性4(威厳)'},
+  {id:'Male_5',  g:'Umbriel',       label:'男性5(のんびり)'},
+  {id:'Male_6',  g:'Enceladus',     label:'男性6(ウィスパー)'},
+  {id:'Male_7',  g:'Achird',        label:'男性7(フレンドリー)'},
+  {id:'Male_8',  g:'Sadachbia',     label:'男性8(活発)'},
+  {id:'Male_9',  g:'Algieba',       label:'男性9(滑らか)'},
+  {id:'Male_10', g:'Algenib',       label:'男性10(渋い)'},
+  {id:'Male_11', g:'Zubenelgenubi', label:'男性11(カジュアル)'},
+  {id:'Male_12', g:'Sadaltager',    label:'男性12(知識豊富)'},
+  {id:'Male_13', g:'Iapetus',       label:'男性13(クリア)'},
+  {id:'Male_14', g:'Rasalgethi',    label:'男性14(情報豊富)'},
+  {id:'Male_15', g:'Alnilam',       label:'男性15(威厳2)'},
+  {id:'Male_16', g:'Schedar',       label:'男性16(平坦)'},
+  {id:'Female_1',  g:'Zephyr',       label:'女性1(明るい)'},
+  {id:'Female_2',  g:'Kore',         label:'女性2(毅然)'},
+  {id:'Female_3',  g:'Leda',         label:'女性3(若々しい)'},
+  {id:'Female_4',  g:'Aoede',        label:'女性4(軽快)'},
+  {id:'Female_5',  g:'Callirrhoe',   label:'女性5(おおらか)'},
+  {id:'Female_6',  g:'Autonoe',      label:'女性6(明るい2)'},
+  {id:'Female_7',  g:'Erinome',      label:'女性7(クリア)'},
+  {id:'Female_8',  g:'Laomedeia',    label:'女性8(アップビート)'},
+  {id:'Female_9',  g:'Achernar',     label:'女性9(ソフト)'},
+  {id:'Female_10', g:'Gacrux',       label:'女性10(大人)'},
+  {id:'Female_11', g:'Despina',      label:'女性11(滑らか)'},
+  {id:'Female_12', g:'Pulcherrima',  label:'女性12(積極的)'},
+  {id:'Female_13', g:'Vindemiatrix', label:'女性13(優しい)'},
+  {id:'Female_14', g:'Sulafat',      label:'女性14(温かい)'},
+];
+const TTS_MODEL  = 'gemini-2.5-flash-preview-tts';
+const TEXT_MODEL = 'gemini-2.5-flash';
+const API_BASE   = 'https://generativelanguage.googleapis.com/v1beta/models/';
+
+const SAMPLE_SCRIPT = `1,narration,"夕暮れの商店街。小さなカフェの窓に、あたたかな灯りがともっていた。",,Female_2,1
+2,dialogue,"いらっしゃいませ!今日のおすすめは、焼きたてのりんごタルトです。",ユイ,Female_1,1
+3,pause,"",,PAUSE_0.5S,1
+4,narration,"ドアベルの音とともに、新しい物語が始まろうとしていた。",,Female_2,2`;
+
+/* ============================================================
+   状態
+   ============================================================ */
+const state = {
+  rows: [],                 // {id,type,text,char,voice,page}
+  audio: new Map(),         // id -> {key, blob, url, buffer, ext}
+  images: new Map(),        // page -> {url, img}
+  bgmBuffer: null,
+  rendering: false,
+  cancelled: false,
+};
+const $ = id => document.getElementById(id);
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+/* ============================================================
+   ユーティリティ
+   ============================================================ */
+function parseCSVLine(line){
+  const out = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (inQ){
+      if (c === '"'){ if (line[i+1] === '"'){ cur += '"'; i++; } else inQ = false; }
+      else cur += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ','){ out.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function parseScript(text){
+  const rows = [];
+  for (const raw of text.split('\n')){
+    const line = raw.trim();
+    if (!line) continue;
+    const f = parseCSVLine(line);
+    if (f.length < 5) continue;
+    rows.push({
+      id: f[0].trim(),
+      type: f[1].trim().toLowerCase(),
+      text: (f[2] || '').trim(),
+      char: (f[3] || '').trim(),
+      voice: (f[4] || '').trim(),
+      page: parseInt(f[5], 10) || 1,
+    });
+  }
+  return rows;
+}
+
+function csvEscape(s){ return '"' + String(s).replace(/"/g, '""') + '"'; }
+
+function pauseSeconds(voiceId){
+  const m = /PAUSE_([\d.]+)S/i.exec(voiceId || '');
+  return m ? parseFloat(m[1]) : 0.5;
+}
+
+function base64ToBytes(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// Gemini TTS は 24kHz/16bit/モノラルの生PCMを返すので WAV に包む
+function pcmToWav(pcmBytes, sampleRate = 24000){
+  const header = new ArrayBuffer(44);
+  const v = new DataView(header);
+  const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  writeStr(0, 'RIFF'); v.setUint32(4, 36 + pcmBytes.length, true); writeStr(8, 'WAVE');
+  writeStr(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  writeStr(36, 'data'); v.setUint32(40, pcmBytes.length, true);
+  return new Blob([header, pcmBytes], {type: 'audio/wav'});
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ============================================================
+   Gemini API
+   ============================================================ */
+function apiKey(){
+  const k = $('api-key').value.trim();
+  if (!k){ alert('Gemini APIキーを設定してください(設定欄)。'); throw new Error('no api key'); }
+  return k;
+}
+
+async function geminiCall(model, body, tries = 4){
+  for (let t = 0; t < tries; t++){
+    const res = await fetch(API_BASE + model + ':generateContent?key=' + encodeURIComponent(apiKey()), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (res.status === 429 || res.status === 503){
+      if (t === tries - 1) throw new Error('APIが混雑しています(' + res.status + ')。しばらく待って再実行してください。');
+      setTtsProgress('APIのレート制限中… ' + (20 * (t + 1)) + '秒待って再試行します');
+      await sleep(20000 * (t + 1));
+      continue;
+    }
+    if (!res.ok){
+      let msg = 'APIエラー (' + res.status + ')';
+      try { msg += ': ' + (await res.json()).error.message; } catch(e){}
+      throw new Error(msg);
+    }
+    return res.json();
+  }
+}
+
+async function ttsGenerate(text, voiceId){
+  const voice = VOICES.find(v => v.id === voiceId) || VOICES.find(v => v.g === voiceId);
+  if (!voice) throw new Error('不明なボイスID: ' + voiceId);
+  const data = await geminiCall(TTS_MODEL, {
+    contents: [{parts: [{text}]}],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {voiceConfig: {prebuiltVoiceConfig: {voiceName: voice.g}}},
+    },
+  });
+  const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!b64) throw new Error('音声データが返されませんでした');
+  return pcmToWav(base64ToBytes(b64));
+}
+
+async function geminiText(prompt){
+  const data = await geminiCall(TEXT_MODEL, {contents: [{parts: [{text: prompt}]}]});
+  const out = (data?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+  return out.replace(/^```[a-z]*\n?/im, '').replace(/```\s*$/m, '').trim();
+}
+
+/* ============================================================
+   ボイスサンプル
+   ============================================================ */
+const sampleCache = new Map();
+function buildVoiceGrid(){
+  $('voice-grid').innerHTML = VOICES.map(v => `
+    <div class="voice-card">
+      <b>${v.label}</b>
+      <span class="vid">${v.id}</span>
+      <button class="play-btn" data-voice="${v.id}" title="試聴">▶</button>
+    </div>`).join('');
+  $('voice-grid').addEventListener('click', async e => {
+    const btn = e.target.closest('button[data-voice]');
+    if (!btn) return;
+    const vid = btn.dataset.voice;
+    btn.textContent = '…'; btn.disabled = true;
+    try {
+      if (!sampleCache.has(vid)){
+        const blob = await ttsGenerate('こんにちは。本日はよろしくお願いします。', vid);
+        sampleCache.set(vid, URL.createObjectURL(blob));
+      }
+      new Audio(sampleCache.get(vid)).play();
+    } catch (err){ alert(err.message); }
+    btn.textContent = '▶'; btn.disabled = false;
+  });
+}
+
+/* ============================================================
+   台本・行リスト・ページ一覧
+   ============================================================ */
+function refreshFromScript(){
+  state.rows = parseScript($('script-input').value);
+  localStorage.setItem('avgen_script', $('script-input').value);
+  renderLineList();
+  renderPageGrid();
+}
+
+function audioKey(row){ return row.text + '|' + row.voice; }
+
+function renderLineList(){
+  const list = $('line-list');
+  if (!state.rows.length){
+    list.innerHTML = '<p class="desc">台本を用意して「音声生成」を押してください。</p>';
+    return;
+  }
+  list.innerHTML = state.rows.map(row => {
+    if (row.type === 'pause'){
+      return `<div class="line-item"><span class="lid">${row.id}</span>
+        <span><span class="tag paus">pause</span><span class="lmeta">${pauseSeconds(row.voice)}秒の無音</span></span><span></span></div>`;
+    }
+    const a = state.audio.get(row.id);
+    const ok = a && a.key === audioKey(row);
+    const tag = row.type === 'dialogue' ? '<span class="tag dial">dialogue</span>' : '<span class="tag narr">narration</span>';
+    return `<div class="line-item">
+      <span class="lid">${row.id}</span>
+      <span><div class="ltext">${tag}${row.char ? '<b>' + row.char + '</b>:' : ''}${escapeHtml(row.text)}</div>
+        <span class="lmeta">${row.voice} / ページ${row.page} ${ok ? '<span class="status-ok">✔ 生成済み</span>' : '<span class="status-wait">未生成</span>'}</span></span>
+      <span class="row" style="gap:8px">
+        ${ok ? `<audio controls src="${a.url}"></audio>
+        <a class="btn-gray btn-sm" style="text-decoration:none;color:#fff" href="${a.url}" download="${row.id}.${a.ext}">⬇</a>` : ''}
+        <button class="btn-indigo btn-sm" data-regen="${row.id}">${ok ? '再生成' : '生成'}</button>
+      </span></div>`;
+  }).join('');
+}
+
+function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function scriptPages(){
+  return [...new Set(state.rows.map(r => r.page))].sort((a, b) => a - b);
+}
+
+function renderPageGrid(){
+  const pages = scriptPages();
+  const grid = $('page-grid');
+  if (!pages.length){
+    grid.innerHTML = '<p class="desc">台本を入力するとページ一覧が表示されます。</p>';
+    return;
+  }
+  grid.innerHTML = pages.map(p => {
+    const im = state.images.get(p);
+    return `<div class="page-card">
+      <div class="thumb">${im ? `<img src="${im.url}">` : 'ページ' + p + '(未設定)'}</div>
+      <b style="font-size:13px">ページ ${p}</b><br>
+      <label class="file-label btn-sm" style="margin-top:6px">画像を選択<input type="file" accept="image/*" data-page="${p}"></label>
+    </div>`;
+  }).join('');
+}
+
+async function setPageImage(page, file){
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  state.images.set(page, {url, img});
+  renderPageGrid();
+}
+
+/* ============================================================
+   音声生成(一括・個別・アップロード)
+   ============================================================ */
+function setTtsProgress(msg){ $('tts-progress-text').textContent = msg; }
+
+async function storeWav(row, blob, ext = 'wav'){
+  const buffer = await audioCtx.decodeAudioData(await blob.arrayBuffer());
+  state.audio.set(row.id, {key: audioKey(row), blob, url: URL.createObjectURL(blob), buffer, ext});
+}
+
+async function generateRowAudio(row){
+  const blob = await ttsGenerate(row.text, row.voice);
+  await storeWav(row, blob);
+}
+
+async function generateAllAudio(){
+  refreshFromScript();
+  const targets = state.rows.filter(r => r.type !== 'pause' && r.text &&
+    !(state.audio.get(r.id) && state.audio.get(r.id).key === audioKey(r)));
+  if (!targets.length){ setTtsProgress('すべての行が生成済みです。'); return; }
+  $('btn-tts').disabled = true;
+  let done = 0;
+  try {
+    for (const row of targets){
+      setTtsProgress(`音声生成中… ${done + 1} / ${targets.length}(ID: ${row.id})`);
+      await generateRowAudio(row);
+      done++;
+      renderLineList();
+    }
+    setTtsProgress(`完了:${done}行の音声を生成しました。`);
+  } catch (err){
+    setTtsProgress(''); alert('音声生成エラー(ID ' + (targets[done] ? targets[done].id : '?') + '):\n' + err.message);
+  }
+  $('btn-tts').disabled = false;
+  renderLineList();
+}
+
+/* ============================================================
+   AI台本生成・ひらがな化
+   ============================================================ */
+async function aiGenerateScript(){
+  const theme = $('ai-theme').value.trim();
+  if (!theme){ alert('テーマ・あらすじを入力してください。'); return; }
+  const btn = $('btn-ai-run');
+  btn.disabled = true; btn.textContent = '生成中…';
+  try {
+    const voiceList = VOICES.map(v => `${v.id} = ${v.label}`).join('\n');
+    const prompt = `あなたはオーディオドラマの脚本家です。以下の条件で日本語の台本をCSV形式で作成してください。
+
+フォーマット(1行につき): ID,タイプ,セリフ,キャラクター,ボイスID,ページ番号
+ルール:
+- タイプは narration / dialogue / pause のいずれか
+- narration はナレーション。キャラクター欄は空欄。ボイスIDは ${$('ai-narrator').value.trim() || 'Female_2'} を使う
+- dialogue は登場人物のセリフ。キャラクター欄に名前を入れる
+- pause は無音。セリフとキャラクター欄は空欄、ボイスIDは PAUSE_0.5S のように秒数を指定。場面転換や余韻に使う
+- セリフは必ずダブルクォートで囲む。セリフ内のダブルクォートは "" にする
+- ページ番号は場面(シーン)ごとに1から順に増やす。1ページ=1枚の背景画像を想定
+- IDは1から連番
+
+使用可能なボイスID:
+${voiceList}
+
+登場人物の指定:
+${$('ai-chars').value.trim() || '(自由に設定してよい)'}
+
+テーマ・あらすじ: ${theme}
+行数の目安: ${parseInt($('ai-lines').value, 10) || 20}行
+
+CSVの行のみを出力してください。ヘッダー行・説明・コードブロックは不要です。`;
+    const csv = await geminiText(prompt);
+    $('script-input').value = csv;
+    refreshFromScript();
+    $('modal-ai').classList.remove('open');
+  } catch (err){ alert(err.message); }
+  btn.disabled = false; btn.textContent = '生成する';
+}
+
+async function hiraganaize(){
+  const src = $('script-input').value.trim();
+  if (!src){ alert('台本が空です。'); return; }
+  const btn = $('btn-hiragana');
+  btn.disabled = true; btn.textContent = '変換中…';
+  try {
+    const out = await geminiText(
+`次のCSV台本の3列目(セリフ)だけを、音声合成が読み間違えないように自然な読みのひらがな(必要に応じてカタカナ)に変換してください。
+他の列(ID・タイプ・キャラクター・ボイスID・ページ番号)は一切変更しないでください。
+セリフはダブルクォートで囲んだまま、CSV形式のまま、全行を出力してください。説明やコードブロックは不要です。
+
+${src}`);
+    if (out) { $('script-input').value = out; refreshFromScript(); }
+  } catch (err){ alert(err.message); }
+  btn.disabled = false; btn.textContent = 'あ ひらがな化';
+}
+
+/* ============================================================
+   動画生成
+   ============================================================ */
+function buildTimeline(){
+  const gap = parseFloat($('set-gap').value) || 0;
+  const segs = []; let t = 0;
+  for (const row of state.rows){
+    if (row.type === 'pause'){
+      segs.push({row, start: t, dur: pauseSeconds(row.voice), buffer: null});
+      t += pauseSeconds(row.voice);
+      continue;
+    }
+    const a = state.audio.get(row.id);
+    if (!a) continue;
+    segs.push({row, start: t, dur: a.buffer.duration, buffer: a.buffer});
+    t += a.buffer.duration + gap;
+  }
+  return {segs, total: t + 0.8};
+}
+
+function drawFrame(ctx, W, H, seg){
+  ctx.fillStyle = '#0b0f1c';
+  ctx.fillRect(0, 0, W, H);
+  const im = seg ? state.images.get(seg.row.page) : null;
+  if (im){
+    const s = Math.max(W / im.img.width, H / im.img.height);
+    const dw = im.img.width * s, dh = im.img.height * s;
+    ctx.drawImage(im.img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  } else if (seg){
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#232c47'); g.addColorStop(1, '#10162a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if (!seg || seg.row.type === 'pause' || !seg.row.text) return;
+  if (!$('set-sub').checked) return;
+
+  // 字幕
+  const fs = Math.round(H * 0.045);
+  ctx.font = `700 ${fs}px "Noto Sans JP", sans-serif`;
+  ctx.textBaseline = 'middle';
+  const maxW = W * 0.86;
+  const lines = [];
+  let cur = '';
+  for (const ch of seg.row.text){
+    if (ctx.measureText(cur + ch).width > maxW){ lines.push(cur); cur = ch; }
+    else cur += ch;
+  }
+  if (cur) lines.push(cur);
+  const shown = lines.slice(0, 3);
+  const lh = fs * 1.5;
+  const showName = $('set-name').checked && seg.row.char;
+  const bandH = shown.length * lh + fs * (showName ? 2.6 : 1.2);
+  ctx.fillStyle = 'rgba(5,8,18,0.72)';
+  ctx.fillRect(0, H - bandH, W, bandH);
+  let y = H - bandH + fs * (showName ? 1.0 : 0.6) + lh / 2;
+  if (showName){
+    ctx.fillStyle = '#a78bfa';
+    ctx.font = `700 ${Math.round(fs * 0.8)}px "Noto Sans JP", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText(seg.row.char, W * 0.07, H - bandH + fs);
+    y += fs * 0.9;
+    ctx.font = `700 ${fs}px "Noto Sans JP", sans-serif`;
+  }
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  for (const line of shown){ ctx.fillText(line, W / 2, y); y += lh; }
+}
+
+function pickMime(){
+  const cands = [
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm',
+  ];
+  for (const m of cands) if (MediaRecorder.isTypeSupported(m)) return m;
+  return '';
+}
+
+async function generateVideo(){
+  refreshFromScript();
+  if (!state.rows.length){ alert('台本が空です。'); return; }
+  const missing = state.rows.filter(r => r.type !== 'pause' && r.text && !state.audio.get(r.id));
+  if (missing.length){
+    alert('音声が未生成の行があります(ID: ' + missing.map(r => r.id).join(', ') + ')。先に「音声生成」を実行してください。');
+    return;
+  }
+  await audioCtx.resume();
+  await document.fonts.load('700 40px "Noto Sans JP"').catch(() => {});
+
+  const [W, H] = $('set-res').value.split('x').map(Number);
+  const canvas = $('render-canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const {segs, total} = buildTimeline();
+  if (!segs.length){ alert('生成できるセグメントがありません。'); return; }
+
+  const dest = audioCtx.createMediaStreamDestination();
+  const monitor = audioCtx.createGain(); monitor.gain.value = 0.6; monitor.connect(audioCtx.destination);
+  const startAt = audioCtx.currentTime + 0.3;
+  const sources = [];
+  for (const seg of segs){
+    if (!seg.buffer) continue;
+    const src = audioCtx.createBufferSource();
+    src.buffer = seg.buffer;
+    src.connect(dest); src.connect(monitor);
+    src.start(startAt + seg.start);
+    sources.push(src);
+  }
+  let bgmSrc = null, bgmGain = null;
+  if (state.bgmBuffer){
+    bgmSrc = audioCtx.createBufferSource();
+    bgmSrc.buffer = state.bgmBuffer; bgmSrc.loop = true;
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = parseInt($('bgm-vol').value, 10) / 100;
+    bgmSrc.connect(bgmGain); bgmGain.connect(dest); bgmGain.connect(monitor);
+    bgmSrc.start(startAt);
+    // 終端でフェードアウト
+    bgmGain.gain.setValueAtTime(bgmGain.gain.value, startAt + total - 1);
+    bgmGain.gain.linearRampToValueAtTime(0, startAt + total);
+  }
+
+  const mime = pickMime();
+  const stream = new MediaStream([
+    ...canvas.captureStream(30).getVideoTracks(),
+    ...dest.stream.getAudioTracks(),
+  ]);
+  const recorder = new MediaRecorder(stream, mime ? {mimeType: mime, videoBitsPerSecond: 6_000_000} : undefined);
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+
+  const finished = new Promise(res => { recorder.onstop = res; });
+  state.rendering = true; state.cancelled = false;
+  $('btn-video').disabled = true;
+  $('btn-video-cancel').style.display = '';
+  $('video-preview').style.display = 'none';
+  $('video-download').style.display = 'none';
+
+  recorder.start(1000);
+  drawFrame(ctx, W, H, segs[0]);
+
+  await new Promise(resolve => {
+    function tick(){
+      const t = audioCtx.currentTime - startAt;
+      if (state.cancelled || t >= total){ resolve(); return; }
+      let seg = null;
+      for (const s of segs){ if (t >= s.start) seg = s; else break; }
+      drawFrame(ctx, W, H, seg);
+      const pct = Math.min(100, Math.max(0, t / total * 100));
+      $('video-bar').style.width = pct.toFixed(1) + '%';
+      $('status-text').textContent = `動画を合成中… ${Math.floor(Math.max(0, t))}秒 / ${Math.ceil(total)}秒`;
+      requestAnimationFrame(tick);
+    }
+    tick();
+  });
+
+  recorder.stop();
+  sources.forEach(s => { try { s.stop(); } catch(e){} });
+  if (bgmSrc) { try { bgmSrc.stop(); } catch(e){} }
+  await finished;
+  monitor.disconnect();
+
+  state.rendering = false;
+  $('btn-video').disabled = false;
+  $('btn-video-cancel').style.display = 'none';
+
+  if (state.cancelled){
+    $('status-text').textContent = '中止しました。';
+    $('video-bar').style.width = '0%';
+    return;
+  }
+  const type = mime || 'video/webm';
+  const blob = new Blob(chunks, {type});
+  const url = URL.createObjectURL(blob);
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  $('video-bar').style.width = '100%';
+  $('status-text').textContent = `完成!(${(blob.size / 1048576).toFixed(1)} MB / ${ext.toUpperCase()}形式)`;
+  const v = $('video-preview');
+  v.src = url; v.style.display = '';
+  const dl = $('video-download');
+  dl.href = url; dl.download = 'drama_' + new Date().toISOString().slice(0, 10) + '.' + ext;
+  dl.style.display = '';
+}
+
+/* ============================================================
+   イベント配線
+   ============================================================ */
+function wire(){
+  buildVoiceGrid();
+
+  $('api-key').value = localStorage.getItem('avgen_apikey') || '';
+  $('api-key').addEventListener('change', () => localStorage.setItem('avgen_apikey', $('api-key').value.trim()));
+
+  $('script-input').value = localStorage.getItem('avgen_script') || SAMPLE_SCRIPT;
+  $('script-input').addEventListener('input', () => { clearTimeout(wire._t); wire._t = setTimeout(refreshFromScript, 500); });
+
+  $('btn-tts').addEventListener('click', generateAllAudio);
+  $('btn-hiragana').addEventListener('click', hiraganaize);
+  $('btn-save-csv').addEventListener('click', () => {
+    const blob = new Blob(['﻿' + $('script-input').value], {type: 'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'script_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+  });
+  $('file-csv').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (f){ $('script-input').value = await f.text(); refreshFromScript(); }
+    e.target.value = '';
+  });
+
+  $('btn-ai-script').addEventListener('click', () => $('modal-ai').classList.add('open'));
+  document.querySelectorAll('[data-close]').forEach(b =>
+    b.addEventListener('click', () => b.closest('.modal-bg').classList.remove('open')));
+  $('btn-ai-run').addEventListener('click', aiGenerateScript);
+
+  $('line-list').addEventListener('click', async e => {
+    const btn = e.target.closest('button[data-regen]');
+    if (!btn) return;
+    const row = state.rows.find(r => r.id === btn.dataset.regen);
+    if (!row) return;
+    btn.disabled = true; btn.textContent = '生成中…';
+    try { await generateRowAudio(row); } catch (err){ alert(err.message); }
+    renderLineList();
+  });
+
+  $('file-audio').addEventListener('change', async e => {
+    refreshFromScript();
+    let matched = 0;
+    for (const f of e.target.files){
+      const m = /(\d+)/.exec(f.name);
+      if (!m) continue;
+      const row = state.rows.find(r => r.id === String(parseInt(m[1], 10)));
+      if (!row || row.type === 'pause') continue;
+      try {
+        const buffer = await audioCtx.decodeAudioData(await f.arrayBuffer());
+        state.audio.set(row.id, {
+          key: audioKey(row), blob: f, url: URL.createObjectURL(f), buffer,
+          ext: (f.name.split('.').pop() || 'wav').toLowerCase(),
+        });
+        matched++;
+      } catch (err){ console.warn('decode失敗:', f.name, err); }
+    }
+    setTtsProgress(matched + '個の音声ファイルを行に割り当てました。');
+    renderLineList();
+    e.target.value = '';
+  });
+
+  $('page-grid').addEventListener('change', async e => {
+    const input = e.target.closest('input[data-page]');
+    if (input && input.files[0]) await setPageImage(parseInt(input.dataset.page, 10), input.files[0]);
+  });
+  $('file-images').addEventListener('change', async e => {
+    for (const f of e.target.files){
+      const m = /(\d+)/.exec(f.name);
+      if (m) await setPageImage(parseInt(m[1], 10), f);
+    }
+    e.target.value = '';
+  });
+
+  $('file-bgm').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      state.bgmBuffer = await audioCtx.decodeAudioData(await f.arrayBuffer());
+      $('bgm-name').textContent = '🎵 ' + f.name;
+    } catch (err){ alert('BGMを読み込めませんでした: ' + err.message); }
+    e.target.value = '';
+  });
+
+  $('btn-video').addEventListener('click', () => generateVideo().catch(err => {
+    state.rendering = false;
+    $('btn-video').disabled = false;
+    $('btn-video-cancel').style.display = 'none';
+    alert('動画生成エラー: ' + err.message);
+  }));
+  $('btn-video-cancel').addEventListener('click', () => { state.cancelled = true; });
+
+  refreshFromScript();
+}
+wire();
+</script>
+</body>
+</html>
