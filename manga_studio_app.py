@@ -58,6 +58,7 @@ import threading
 import time
 import traceback
 import unicodedata
+import zipfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -649,6 +650,41 @@ def api_job_results(job_id):
     return jsonify([{"name": p.name, "url": f"/api/job/{job_id}/file/{p.name}"} for p in files])
 
 
+@app.route("/api/job/<job_id>/download-zip")
+def api_job_zip(job_id):
+    """生成済み画像をZIPでまとめて返す（中断していても、できている分だけ出る）。
+
+    kind=pages: 漫画ページ / kind=shorts: 縦型カット / kind=all: 両方
+    """
+    kind = (request.args.get("kind") or "pages").lower()
+    d = job_dir(job_id)
+    if not d.exists():
+        return jsonify({"error": "ジョブが見つかりません"}), 404
+
+    targets: list[tuple[Path, str]] = []
+    if kind in ("pages", "all"):
+        for f in sorted((p for p in d.iterdir()
+                         if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg")),
+                        key=lambda p: _natkey(p.name)):
+            targets.append((f, f.name))
+    if kind in ("shorts", "all"):
+        sd = d / "shorts"
+        if sd.exists():
+            for f in sorted((p for p in sd.iterdir() if p.suffix.lower() == ".png"),
+                            key=lambda p: _natkey(p.name)):
+                targets.append((f, f"shorts/{f.name}"))
+    if not targets:
+        return jsonify({"error": "ZIPに入れる画像がありません"}), 400
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for path, arc in targets:
+            z.write(path, arc)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/zip", as_attachment=True,
+                     download_name=f"manga_{job_id}_{kind}.zip")
+
+
 @app.route("/api/job/<job_id>/export-shorts", methods=["POST"])
 def api_export_shorts(job_id):
     """生成済みページをコマ単位で切り出し、1080x1920 の縦型フレームにする。"""
@@ -853,8 +889,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <div class="tabs" style="margin:0;">
         <div class="tab" id="tab-view-pages" style="flex:0 0 auto; padding:8px 18px;">ページ表示</div>
         <div class="tab" id="tab-view-shorts" style="flex:0 0 auto; padding:8px 18px;">縦型カット (9:16)</div>
+        <button class="btn btn-secondary" id="btn-zip"
+          style="width:auto; margin:0 0 0 auto; padding:8px 16px; font-size:13px;">
+          ⬇ ZIPでダウンロード</button>
         <button class="btn btn-primary" id="btn-shorts"
-          style="width:auto; margin:0 0 0 auto; padding:8px 18px; font-size:13px;">
+          style="width:auto; margin:0; padding:8px 18px; font-size:13px;">
           📱 ショート動画用に書き出す</button>
       </div>
       <div class="hint" id="shorts-hint">コマ単位で切り出し、1080×1920 のフレームにします（1コマ＝1カット）</div>
@@ -1057,6 +1096,12 @@ async function renderResults() {
     c.append(a, nm); box.appendChild(c);
   });
 }
+
+document.getElementById('btn-zip').onclick = () => {
+  if (!currentJob) return;
+  const kind = viewMode === 'shorts' ? 'shorts' : 'pages';
+  window.location = `/api/job/${currentJob}/download-zip?kind=${kind}`;
+};
 
 document.getElementById('btn-shorts').onclick = async () => {
   const b = document.getElementById('btn-shorts');
