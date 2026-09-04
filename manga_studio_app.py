@@ -72,6 +72,11 @@ if str(SCRIPTS_DIR) not in sys.path:
 os.environ.setdefault("PROJECT_ROOT", str(ROOT))
 
 try:
+    import shorts_export  # noqa: E402  縦型書き出し（任意）
+except ImportError:
+    shorts_export = None
+
+try:
     import codex_render_from_csv as core  # noqa: E402
 except ImportError as e:
     print(f"[!] scripts/codex_render_from_csv.py が見つかりません: {e}", file=sys.stderr)
@@ -644,6 +649,43 @@ def api_job_results(job_id):
     return jsonify([{"name": p.name, "url": f"/api/job/{job_id}/file/{p.name}"} for p in files])
 
 
+@app.route("/api/job/<job_id>/export-shorts", methods=["POST"])
+def api_export_shorts(job_id):
+    """生成済みページをコマ単位で切り出し、1080x1920 の縦型フレームにする。"""
+    if shorts_export is None:
+        return jsonify({"error": "shorts_export.py が見つかりません（アプリと同じ場所に置いてください）"}), 400
+    d = job_dir(job_id)
+    if not (d / "job.json").exists():
+        return jsonify({"error": "ジョブが見つかりません"}), 404
+    try:
+        files = shorts_export.export_job(d, TEMPLATE_DIR)
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": f"書き出しに失敗しました: {e}"}), 500
+    if not files:
+        return jsonify({"error": "書き出せるページがありません（先に生成してください）"}), 400
+    return jsonify({"count": len(files), "dir": str(d / "shorts")})
+
+
+@app.route("/api/job/<job_id>/shorts")
+def api_job_shorts(job_id):
+    d = job_dir(job_id) / "shorts"
+    if not d.exists():
+        return jsonify([])
+    files = sorted((p for p in d.iterdir() if p.suffix.lower() == ".png"),
+                   key=lambda p: _natkey(p.name))
+    return jsonify([{"name": p.name, "url": f"/api/job/{job_id}/shorts-file/{p.name}"}
+                    for p in files])
+
+
+@app.route("/api/job/<job_id>/shorts-file/<path:name>")
+def api_job_shorts_file(job_id, name):
+    try:
+        return send_file(_safe_under(job_dir(job_id) / "shorts", name))
+    except (FileNotFoundError, ValueError):
+        return "not found", 404
+
+
 @app.route("/api/job/<job_id>/file/<path:name>")
 def api_job_file(job_id, name):
     try:
@@ -807,6 +849,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
   </div>
 
   <div class="right">
+    <div id="shorts-bar" style="display:none; margin-bottom:16px;">
+      <div class="tabs" style="margin:0;">
+        <div class="tab" id="tab-view-pages" style="flex:0 0 auto; padding:8px 18px;">ページ表示</div>
+        <div class="tab" id="tab-view-shorts" style="flex:0 0 auto; padding:8px 18px;">縦型カット (9:16)</div>
+        <button class="btn btn-primary" id="btn-shorts"
+          style="width:auto; margin:0 0 0 auto; padding:8px 18px; font-size:13px;">
+          📱 ショート動画用に書き出す</button>
+      </div>
+      <div class="hint" id="shorts-hint">コマ単位で切り出し、1080×1920 のフレームにします（1コマ＝1カット）</div>
+    </div>
     <div id="results-area">
       <div class="placeholder">Generation results will appear here.<br>
         設定を選んで「Start Generation」を押してください。</div>
@@ -942,6 +994,8 @@ function attachJob(jobId) {
   currentJob = jobId;
   $('job-controls').style.display = 'block';
   $('results-area').innerHTML = '<div class="results" id="results"></div>';
+  $('shorts-bar').style.display = 'block';
+  setView('pages');
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(poll, 1500);
   poll();
@@ -961,26 +1015,62 @@ async function poll() {
   log.textContent = (data.log || []).join('\n');
   log.scrollTop = log.scrollHeight;
 
-  const files = await (await fetch(`/api/job/${currentJob}/results`)).json();
-  const results = $('results');
-  if (results) {
-    results.innerHTML = '';
-    files.forEach(f => {
-      const c = document.createElement('div'); c.className = 'card';
-      const a = document.createElement('a'); a.href = f.url; a.target = '_blank';
-      const img = document.createElement('img'); img.src = f.url; img.loading = 'lazy';
-      a.appendChild(img);
-      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = f.name;
-      c.append(a, nm); results.appendChild(c);
-    });
-    if (!files.length) results.innerHTML =
-      '<div class="placeholder">生成中です…<br>1ページあたり数分かかることがあります。</div>';
-  }
+  await renderResults();
   if (['completed', 'stopped', 'error'].includes(data.status)) {
     clearInterval(pollTimer); pollTimer = null; loadJobs();
     if (data.status === 'error' && data.error) alert('ジョブが異常終了しました: ' + data.error);
   }
 }
+
+let viewMode = 'pages';
+function setView(m) {
+  viewMode = m;
+  document.getElementById('tab-view-pages').classList.toggle('active', m === 'pages');
+  document.getElementById('tab-view-shorts').classList.toggle('active', m === 'shorts');
+  renderResults();
+}
+document.getElementById('tab-view-pages').onclick = () => setView('pages');
+document.getElementById('tab-view-shorts').onclick = () => setView('shorts');
+
+async function renderResults() {
+  if (!currentJob) return;
+  const ep = viewMode === 'shorts' ? 'shorts' : 'results';
+  const files = await (await fetch(`/api/job/${currentJob}/${ep}`)).json();
+  let box = document.getElementById('results');
+  if (!box) {
+    document.getElementById('results-area').innerHTML = '<div class="results" id="results"></div>';
+    box = document.getElementById('results');
+  }
+  box.innerHTML = '';
+  if (!files.length) {
+    box.innerHTML = viewMode === 'shorts'
+      ? '<div class="placeholder">まだ書き出していません。<br>「📱 ショート動画用に書き出す」を押してください。</div>'
+      : '<div class="placeholder">生成中です…<br>1ページあたり数分かかることがあります。</div>';
+    return;
+  }
+  files.forEach(f => {
+    const c = document.createElement('div'); c.className = 'card';
+    const a = document.createElement('a'); a.href = f.url; a.target = '_blank';
+    const img = document.createElement('img'); img.src = f.url; img.loading = 'lazy';
+    a.appendChild(img);
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = f.name;
+    c.append(a, nm); box.appendChild(c);
+  });
+}
+
+document.getElementById('btn-shorts').onclick = async () => {
+  const b = document.getElementById('btn-shorts');
+  b.disabled = true; b.textContent = '書き出し中…';
+  try {
+    const r = await (await fetch(`/api/job/${currentJob}/export-shorts`, {method:'POST'})).json();
+    if (r.error) { alert(r.error); return; }
+    document.getElementById('shorts-hint').textContent =
+      `${r.count} カットを書き出しました → ${r.dir}`;
+    setView('shorts');
+  } finally {
+    b.disabled = false; b.textContent = '📱 ショート動画用に書き出す';
+  }
+};
 
 const ctl = (path) => () => { if (currentJob) fetch(`/api/job/${currentJob}/${path}`, {method:'POST'}); };
 $('btn-pause').onclick = ctl('pause');
